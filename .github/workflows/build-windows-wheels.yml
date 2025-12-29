@@ -1,0 +1,108 @@
+name: gsplat Windows Build Pipeline
+
+on: 
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # TORCH_CUDA_ARCH_LIST
+  # cu128 = [sm_70', 'sm_75', 'sm_80', 'sm_86', 'sm_90', 'sm_100', 'sm_120']
+  # 7.0(V100,Taita V), 7.5(RTX20), 8.0(A100), 8.6(RTX30), 8.9(RTX40),
+  # 9.0(H100), 10.0/12.0(RTX50/Blackwell, cuda version >= 12.8)
+  # NOTE: torch.cuda.get_arch_list() is not available on CPU-only machines.
+  TARGET_GPU_ARCHS: "7.5;8.6;8.9;10.0;12.0"
+  GSPLAT_REPO: "https://github.com/nerfstudio-project/gsplat.git"
+
+jobs:
+  build_wheels:
+    name: Build gsplat${{ matrix.gsplat-tag }}-pt${{ matrix.torch-version }}-cu${{ matrix.cuda-version }}
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        gsplat-tag: ['v1.5.3']
+        python-version: ['3.12']
+        torch-version: ['2.9.1']
+        cuda-version: ['12.8.0']
+
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v5
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install CUDA ${{ matrix.cuda-version }}
+        uses: Jimver/cuda-toolkit@v0.2.30
+        id: cuda-toolkit
+        with:
+          cuda: ${{ matrix.cuda-version }}
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "visual_studio_integration"]'
+
+      - name: Install PyTorch and Build Deps
+        shell: pwsh
+        run: |
+          $cuda_ver_short = "${{ matrix.cuda-version }}".Split('.')[0..1] -join ""
+          $index_url = "https://download.pytorch.org/whl/cu$cuda_ver_short"
+
+          python -m pip install --upgrade pip
+          python -m pip install torch==${{ matrix.torch-version }}+cu$cuda_ver_short --index-url $index_url
+          python -m pip install ninja jaxtyping "rich>=12" setuptools wheel
+
+      - name: Clone gsplat source
+        shell: bash
+        run: |
+          git clone --branch ${{ matrix.gsplat-tag }} --depth 1 ${{ env.GSPLAT_REPO }} gsplat_src
+          cd gsplat_src
+          git submodule update --init --recursive
+
+      - name: Build gsplat Wheel
+        shell: cmd
+        working-directory: gsplat_src
+        env:
+          DISTUTILS_USE_SDK: 1
+          TORCH_CUDA_ARCH_LIST: ${{ env.TARGET_GPU_ARCHS }}
+          CMAKE_GENERATOR: Ninja
+          MAX_JOBS: 4
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+            set "VS_PATH=%%i"
+          )
+          call "%VS_PATH%\VC\Auxiliary\Build\vcvars64.bat"
+
+          python setup.py bdist_wheel --dist-dir ../dist
+
+      - name: Rename wheel
+        shell: pwsh
+        run: |
+          # rename gsplat-1.5.3-cp312-cp312-win_amd64.whl to gsplat-1.5.3+pt27cu128-cp312-cp312-win_amd64.whl
+
+          $pt_ver = "${{ matrix.torch-version }}".Split('.')[0..1] -join ""
+          $cu_ver = "${{ matrix.cuda-version }}".Split('.')[0..1] -join ""
+          $suffix = "+pt${pt_ver}cu${cu_ver}"
+
+          $whl = Get-ChildItem dist/*.whl | Select-Object -First 1
+          if (-not $whl) { throw "Wheel file not found" }
+
+          $oldName = $whl.Name
+          $parts = $oldName.Split('-')
+          $parts[1] = $parts[1] + $suffix
+
+          $newName = $parts -join '-'
+          Write-Host "Renaming $oldName to $newName"
+          
+          Move-Item "dist/$oldName" "dist/$newName"
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows_wheels_test
+          name: gsplat precompiled wheels
+          files: dist/*.whl
+          fail_on_unmatched_files: true
+          overwrite: true
