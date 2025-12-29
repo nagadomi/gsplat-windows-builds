@@ -14,7 +14,7 @@ env:
 
 jobs:
   build_wheels:
-    name: Build gsplat${{ matrix.gsplat-tag }}-pt${{ matrix.torch-version }}-cu${{ matrix.cuda-config.version }}
+    name: Build gsplat_${{ matrix.gsplat-tag }}-cp${{ matrix.python-versio }}-pt${{ matrix.torch-version }}-cu${{ matrix.cuda-config.version }}
     runs-on: windows-2022
     strategy:
       fail-fast: false
