@@ -1,18 +1,15 @@
 name: gsplat Windows Build Pipeline
 
-on: 
+on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 env:
-  # TORCH_CUDA_ARCH_LIST
-  # cu128 = [sm_70', 'sm_75', 'sm_80', 'sm_86', 'sm_90', 'sm_100', 'sm_120']
-  # 7.0(V100,Taita V), 7.5(RTX20), 8.0(A100), 8.6(RTX30), 8.9(RTX40),
-  # 9.0(H100), 10.0/12.0(RTX50/Blackwell, cuda version >= 12.8)
-  # NOTE: torch.cuda.get_arch_list() is not available on CPU-only machines.
-  TARGET_GPU_ARCHS: "7.5;8.6;8.9;10.0;12.0"
   GSPLAT_REPO: "https://github.com/nerfstudio-project/gsplat.git"
 
 jobs:
@@ -23,9 +20,11 @@ jobs:
       fail-fast: false
       matrix:
         gsplat-tag: ['v1.5.3']
-        python-version: ['3.12']
-        torch-version: ['2.9.1']
-        cuda-version: ['12.8.0']
+        python-version: ['3.10', '3.11', '3.12']
+        torch-version: ['2.7.1', '2.9.1']
+        cuda-config:
+          - version: "12.8.0"
+            archs: "7.5;8.6;8.9;10.0;12.0"
 
     steps:
       - name: Checkout this repo
@@ -36,18 +35,18 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install CUDA ${{ matrix.cuda-version }}
+      - name: Install CUDA ${{ matrix.cuda-config.version }}
         uses: Jimver/cuda-toolkit@v0.2.30
         id: cuda-toolkit
         with:
-          cuda: ${{ matrix.cuda-version }}
+          cuda: ${{ matrix.cuda-config.version }}
           method: 'network'
           sub-packages: '["nvcc", "cudart", "visual_studio_integration"]'
 
       - name: Install PyTorch and Build Deps
         shell: pwsh
         run: |
-          $cuda_ver_short = "${{ matrix.cuda-version }}".Split('.')[0..1] -join ""
+          $cuda_ver_short = "${{ matrix.cuda-config.version }}".Split('.')[0..1] -join ""
           $index_url = "https://download.pytorch.org/whl/cu$cuda_ver_short"
 
           python -m pip install --upgrade pip
@@ -66,7 +65,7 @@ jobs:
         working-directory: gsplat_src
         env:
           DISTUTILS_USE_SDK: 1
-          TORCH_CUDA_ARCH_LIST: ${{ env.TARGET_GPU_ARCHS }}
+          TORCH_CUDA_ARCH_LIST: ${{ matrix.cuda-config.archs }}
           CMAKE_GENERATOR: Ninja
           MAX_JOBS: 4
         run: |
@@ -83,7 +82,7 @@ jobs:
           # rename gsplat-1.5.3-cp312-cp312-win_amd64.whl to gsplat-1.5.3+pt27cu128-cp312-cp312-win_amd64.whl
 
           $pt_ver = "${{ matrix.torch-version }}".Split('.')[0..1] -join ""
-          $cu_ver = "${{ matrix.cuda-version }}".Split('.')[0..1] -join ""
+          $cu_ver = "${{ matrix.cuda-config.version }}".Split('.')[0..1] -join ""
           $suffix = "+pt${pt_ver}cu${cu_ver}"
 
           $whl = Get-ChildItem dist/*.whl | Select-Object -First 1
@@ -101,8 +100,8 @@ jobs:
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: windows_wheels_test
-          name: gsplat precompiled wheels
+          tag_name: ${{ github.ref_name }}
+          name: gsplat precompiled wheels ${{ github.ref_name }}
           files: dist/*.whl
           fail_on_unmatched_files: true
           overwrite: true
