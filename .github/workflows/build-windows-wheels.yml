@@ -56,9 +56,7 @@ jobs:
       - name: Clone gsplat source
         shell: bash
         run: |
-          git clone --branch ${{ matrix.gsplat-tag }} --depth 1 ${{ env.GSPLAT_REPO }} gsplat_src
-          cd gsplat_src
-          git submodule update --init --recursive
+          git clone --branch ${{ matrix.gsplat-tag }} --depth 1 --recursive --shallow-submodules ${{ env.GSPLAT_REPO }} gsplat_src
 
       - name: Build gsplat Wheel
         shell: cmd
