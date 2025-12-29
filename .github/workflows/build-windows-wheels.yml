@@ -104,4 +104,4 @@ jobs:
           name: gsplat precompiled wheels ${{ github.ref_name }}
           files: dist/*.whl
           fail_on_unmatched_files: true
-          overwrite: true
+          overwrite_files: true
