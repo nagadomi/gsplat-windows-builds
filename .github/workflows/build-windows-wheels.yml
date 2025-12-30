@@ -47,8 +47,8 @@ jobs:
         id: cuda-toolkit
         with:
           cuda: ${{ matrix.cuda-config.version }}
-          method: 'network'
-          sub-packages: '["nvcc", "cudart", "visual_studio_integration"]'
+          method: 'local'
+          # sub-packages: '["nvcc", "cudart", "visual_studio_integration"]'
 
       - name: Install PyTorch and Build Deps
         shell: pwsh
