@@ -39,7 +39,8 @@ def install_gsplat_windows(gsplat_version, release_url):
 
 def sample_code():
     GSPLAT_VERSION = "1.5.3"
-    GSPLAT_WINDOWS_RELEASE_URL = "https://api.github.com/repos/nagadomi/gsplat-windows-builds/releases/latest"
+    # GSPLAT_WINDOWS_RELEASE_URL = "https://api.github.com/repos/nagadomi/gsplat-windows-builds/releases/latest"
+    GSPLAT_WINDOWS_RELEASE_URL = "https://api.github.com/repos/nagadomi/gsplat-windows-builds/releases/tags/v20251230_6"
     install_gsplat_windows(GSPLAT_VERSION, GSPLAT_WINDOWS_RELEASE_URL)
 
 
